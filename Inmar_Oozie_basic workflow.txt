@@ -1,0 +1,40 @@
+
+Workflow:
+
+<workflow-app name="inmar-wf" xmlns="uri:oozie:workflow:0.3">
+    ...
+    <action name="sqoopjob">
+        <sqoop xmlns="uri:oozie:sqoop-action:0.3">
+            <job-traker>ip-172-31-26-5.ap-south-1.compute.internal:8021</job-tracker>
+            <name-node>ip-172-31-26-5.ap-south-1.compute.internal:8020</name-node>
+            <prepare>
+                <delete path="${jobOutput}"/>
+            </prepare>
+            <configuration>
+                <property>
+                    <name>mapred.compress.map.output</name>
+                    <value>true</value>
+                </property>
+            </configuration>
+            <command>import  --connect jdbc:mysql:file:db.sample --table AdventureWorks --target-dir //ip-172-31-26-5.ap-south-1.compute.internal --username root --password admin@123
+/user/sqoop -m 1</command>
+        </sqoop>
+        <ok to="myotherjob"/>
+        <error to="errorcleanup"/>
+    </action>
+    ...
+</workflow-app>
+
+
+
+Co-ordinator:
+
+ A dataset produced once every day at 01:00 AM IST and done-flag is set to empty:
+
+  <dataset name="logs" frequency="${coord:days(1)}"
+           initial-instance="2019-03-26T01:00Z" timezone="India/Andhra Pradesh">
+    <uri-template>
+      hdfs://ip-172-31-26-5.ap-south-1.compute.internal:9000/app/logs/${market}/${YEAR}${MONTH}/${DAY}/data
+    </uri-template>
+    <done-flag></done-flag>
+  </dataset>

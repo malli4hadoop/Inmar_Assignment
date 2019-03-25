@@ -1,0 +1,355 @@
+Cloudera Manager Installation:
+
+1.Installing mysql for cloudera manager on one machine. 
+Reason – Mysql, Postgres or Oracle DBs are required for storing the metadata information regarding the cloudera manager’s components like Activity monitor, Reports Manager and Hadoop components like hive Metastore, Sentry Credentials and ACLs Details, Cloudera Navigator metadata. For this you need to install mysql or other RDBMS databases to hold the metadata information. You also have to create the databases and user name first and you have to provide the credentials you are setting up while installing the relevant components through cloudera manager
+ 
+a.Follow below steps to install and configure mysql required for setting up cloudera manager on the first machine.
+
+cd /usr/src
+sudo yum install wget
+sudo wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
+sudo rpm -ivh mysql-community-release-el7-5.noarch.rpm
+sudo yum install mysql-server
+sudo systemctl start mysqld
+ 
+b.Verify the running status of mysql using the below command
+service mysqld status
+ 
+c. update /etc/my.cnf file and add the below lines
+sudo vi /etc/my.cnf
+ 
+
+[mysqld]
+transaction-isolation = READ-COMMITTED
+# Disabling symbolic-links is recommended to prevent assorted security risks;
+# to do so, uncomment this line:
+# symbolic-links = 0
+key_buffer_size = 32M
+max_allowed_packet = 32M
+thread_stack = 256K
+thread_cache_size = 64
+query_cache_limit = 8M
+query_cache_size = 64M
+query_cache_type = 1
+max_connections = 550
+#expire_logs_days = 10
+#max_binlog_size = 100M
+#log_bin should be on a disk with enough free space. Replace '/var/lib/mysql/mysql_binary_log' with an appropriate path for your system
+#and chown the specified folder to the mysql user.
+log_bin=/var/lib/mysql/mysql_binary_log
+# For MySQL version 5.1.8 or later. For older versions, reference MySQL documentation for configuration help.
+binlog_format = mixed
+read_buffer_size = 2M
+read_rnd_buffer_size = 16M
+sort_buffer_size = 8M
+join_buffer_size = 8M
+# InnoDB settings
+innodb_file_per_table = 1
+innodb_flush_log_at_trx_commit  = 2
+innodb_log_buffer_size = 64M
+innodb_buffer_pool_size = 4G
+innodb_thread_concurrency = 8
+innodb_flush_method = O_DIRECT
+innodb_log_file_size = 512M
+[mysqld_safe]
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+sql_mode=STRICT_ALL_TABLES
+
+d.Ensure mysql server starts on boot
+sudo /sbin/chkconfig mysqld on 
+systemctl list-unit-files
+ 
+e.Restart the mysqld for the configurations to reflect
+service mysqld restart 
+service mysqld status
+If the output says active(running) in green colour, your mysql is perfectly running.
+ 
+f.Set the mysql root password using the below steps
+sudo /usr/bin/mysql_secure_installation
+[...]
+Enter current password for root: Just click enter  
+OK, successfully used password, moving on...
+[...]
+Set root password? [Y/n] y
+New password: <Enter your new password>
+Re-enter new password: <Re-Enter your new password>
+Remove anonymous users? [Y/n] Y
+[...]
+Disallow root login remotely? [Y/n] N
+[...]
+Remove test database and access to it [Y/n] Y
+[...]
+Reload privilege tables now? [Y/n] Y
+All done!
+ 
+g.Install mysql connector jar file using the below steps on all the machines. 
+ 
+cd /usr/src 
+sudo yum install wget
+sudo wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-5.1.46.tar.gz 
+sudo gunzip mysql-connector-java-5.1.46.tar.gz 
+sudo tar -xvf mysql-connector-java-5.1.46.tar 
+sudo mkdir –p /usr/share/java
+sudo cp mysql-connector-java-5.1.46/mysql-connector-java-5.1.46-bin.jar /usr/share/java/mysql-connector-java.jar
+
+h.Creating the databases for cloudera manager services and CDH Components metastores on the first machine
+mysql –u root –p
+Enter your password configures.
+create database cmserver DEFAULT CHARACTER SET utf8;
+grant all on cmserver.* TO 'cmserveruser'@'%' IDENTIFIED BY 'password';
+create database amon DEFAULT CHARACTER SET utf8;
+grant all on amon.* TO 'amon'@'%' IDENTIFIED BY 'amon_password';
+create database rman DEFAULT CHARACTER SET utf8;
+grant all on rman.* TO 'rman'@'%' IDENTIFIED BY 'rman_password';
+create database metastore DEFAULT CHARACTER SET utf8;
+grant all on metastore.* TO 'hive'@'%' IDENTIFIED BY 'hive_password';
+create database sentry DEFAULT CHARACTER SET utf8;
+grant all on sentry.* TO 'sentry'@'%' IDENTIFIED BY 'sentry_password';
+create database oozie_oozie_server DEFAULT CHARACTER SET utf8;
+grant all on oozie_oozie_server.* TO 'oozie_server '@'%' IDENTIFIED BY 'oozie_password';
+create database hue DEFAULT CHARACTER SET utf8;
+grant all on hue.* TO 'hue_server '@'%' IDENTIFIED BY  ‘hue_password';
+
+Pre-requisites:
+ 
+2.Disable SELinux to allow the ports.
+Reason - One common reason to disable the firewall is, as we know HDFS maintains replication in different nodes/racks but it shouldn't take any extra time for that. Setting firewall using SElinux may disturb this (or) lead to performance issue. So the general recommendation is to disable the firewall.
+
+a.Open the file /etc/selinux/config
+sudo vi /etc/selinux/config
+
+Change the config SELINUX=disabled from enforcing
+ same in all the machines
+
+ 
+ 
+3.Install NTP Daemon
+ If you are using RHEL 7 disable chrony daemon before you install ntp using the below command
+ 	systemctl disable chronyd
+ 	
+Reason for NTP in linux
+        It is used to synchronize the time on your Linux system with a centralized NTP server.
+sudo yum install ntp
+
+Verify the ntp using
+chkconfig ntpd on
+
+Start the ntpd using the following command
+service ntpd start
+
+service ntpd status
+
+same on all the machines
+ 
+ 
+4.Disable IPTables
+        Reason - Stopping iptables is not necessary if you can create proper IN and OUT rules for the ports which you need to open for data communication across your nodes.
+yum -y install firewalld
+systemctl stop firewalld
+systemctl mask firewalld
+
+same on all the machines
+
+5.Disable Transparent Huge page in all the machines (optional)
+Reason - In the Linux kernel, the standard size for a block of addressable memory is four kilobytes. This is called a page. Every system has a finite number of addressable pages, based on how much physical memory the system has installed. A page table is used to keep track of the location of each page in the system. This table can get gigantic. So disable it for hadoop to handle the linux block size   	
+vi /etc/default/grub
+
+Add the following line to the GRUB_CMDLINE_LINUX options
+transparent_hugepage=never
+               	
+Run the below command to make the changes reflected
+grub2-mkconfig -o /boot/grub2/grub.cfg
+ 
+6.Set vm.swappiness to 1 using the below process in all the machines
+ 
+Reason - The Linux kernel parameter, vm.swappiness, is a value from 0-100 that controls the swapping of application data (as anonymous pages) from physical memory to virtual memory on disk. The higher the value, the more aggressively inactive processes are swapped out from physical memory. The lower the value, the less they are swapped, forcing filesystem buffers to be emptied. echo "vm.swappiness=1" >> /etc/sysctl.conf
+ 
+Do this on all the machines.
+Restart the machine using shutdown –r
+ 
+Once the machines are restarted verify the ntpd status by below command
+service ntpd status
+
+If the ntpd is not running, start the ntp daemon using the below command 
+service ntpd start
+ 
+7.Setup password less authentication for root to access other VMs
+Login your first machine
+ 
+sudo su
+vi /etc/hosts 
+
+This file will host the hostname and alias details for the private IP and DNS.
+Please do not use _ for hostname
+Enter the Private IP and Hostname in the below format
+
+172.31.19.175	ip-172-31-19-175.ap-south-1.compute.internal
+172.31.20.118	ip-172-31-20-118.ap-south-1.compute.internal
+172.31.26.5	ip-172-31-26-5.ap-south-1.compute.internal
+172.31.30.174	ip-172-31-30-174.ap-south-1.compute.internal
+ 
+same on all machines
+
+Once the hostname is set, proceed to establish password less authentication. 
+Switch to the first machine and execute 
+ssh-keygen -t rsa
+
+Enter the passphrase and location with empty value. Just press enter. For additional security we would be using passphrase. Default location of id_rsa.pub will be ~/.ssh/      
+
+cat ~/.ssh/id_rsa.pub
+Copy the previous command output and paste it in a notepad.
+ 
+Similarly copy the contents from rest of the machines and paste it in notepad. 
+cd ~/.ssh/
+vi authorized_keys
+Paste all the copied id_rsa.pub from the notepad to authorized_keys files.
+ 
+
+Do the same in all the machines
+Ssh each other machines and check the connectivity using the below commands
+      	ssh <first_machine-hostname>
+      	ssh <second_machine-hostname>
+      	ssh <third_machine-hostname>
+      	ssh <fourth_machine-hostname>
+ Also check if all machines are pinging each other by name and IP address
+
+
+ 
+8.Download the cloudera manager and cdh repo
+    a.Download the repo key on all the machines
+sudo rpm --import https://archive.cloudera.com/cdh5/redhat/7/x86_64/cdh/RPM-GPG-KEY-cloudera
+
+    b.Create a file vi /etc/yum.repos.d/cloudera-cdh.repo and paste the below contents in it
+
+sudo vi /etc/yum.repos.d/cloudera-cdh.repo
+
+[cloudera-cdh5]
+# Packages for Cloudera's Distribution for Hadoop, Version 5, on RedHat  or CentOS 7 x86_64
+name=Cloudera's Distribution for Hadoop, Version 5
+baseurl=https://archive.cloudera.com/cdh5/redhat/7/x86_64/cdh/5.13.1/
+gpgkey =https://archive.cloudera.com/cdh5/redhat/7/x86_64/cdh/RPM-GPG-KEY-cloudera  	
+gpgcheck = 1
+ 
+    c.Create a file vi /etc/yum.repos.d/cloudera-manager.repo and paste the below contents
+
+sudo vi /etc/yum.repos.d/cloudera-manager.repo
+
+[cloudera-manager]
+# Packages for Cloudera Manager, Version 5, on RedHat or CentOS 7 x86_64             	      	  
+name=Cloudera Manager
+baseurl=https://archive.cloudera.com/cm5/redhat/7/x86_64/cm/5.13.1/
+gpgkey =https://archive.cloudera.com/cm5/redhat/7/x86_64/cm/RPM-GPG-KEY-cloudera  	
+gpgcheck = 1
+ 
+ 
+10.Install cloudera manager on first machine
+
+a.Install jdk on all the machines
+             	yum install oracle-j2sdk1.7
+
+b.Install cloudera manager using the command ON FIRST MACHINE
+sudo yum install cloudera-manager-daemons cloudera-manager-server
+
+c.Execute the below command to create a mysql database preparation for cloudera manager on the first machine
+sudo /usr/share/cmf/schema/scm_prepare_database.sh mysql cmserver cmserveruser password                        	 
+ 
+d.Once the installation is done, In your browser copy the public IP and use the port 7180 using the below format
+     service cloudera-scm-server start
+     	
+               	service cloudera-scm-server status
+               	service cloudera-scm-server start
+
+
+http://<your public ip>:7180
+If the browser is not working, use the below command to check the status of the cloudera-scm-server
+
+       
+e.	Login using the credentials admin/admin
+f.	Accept the end user license and click continue
+g.	Select “Cloudera Enterprise Data Hub Edition Trial” and click continue
+ 
+
+h.	Enter the hostname of all the machines you want to install cloudera-agent in comma separated or like below
+      	cloudera-[1-4]
+ 
+  
+
+i.	Verify that you are downloading the CDH 5.12 which is the recent available version of cdh. Click continue button
+ 
+
+j.	Skip this if you have installed Java before. Click the continue button on Oracle JDK license page by clicking the two options available, one for Oracle JDK and another one for Java Unlimited strength Encryption policy.
+
+ 
+ 
+k.	On the production environment the suggested and advice is to use “single user mode” . The reason for the single user mode is to make cloudera-scm user control the hadoop administration. If not picking the “single user mode” root user will manage the hadoop administration and the management part. 
+ 
+l.	On the cluster installation page, Don’t pick the “root” user name. Select the “another user” option and enter the username as “ec2-user”
+Click on the “All hosts accept the same private key option” and select the public key received from AWS. Refer the below screenshot for more details.
+ 
+ 
+
+m.	Installing the cloudera parcels have started and the packages required for the clusters are getting installed in all the hosts. This will take some time initially. 
+
+ 
+
+n.	Click Continue and you could see the parcel distributions. 
+
+ 
+
+	Once you click Continue, Host inspector will be running. This will check the potentials configurations suggestion from cloudera and verify the configurations are made correct for the cloudera manager and CDH to work properly. We can ignore the huge page transactions. If you feel not comfortable with warnings, you can resolve it. 
+
+ ’
+Click finish to set-up CDH components. Now cloudera manager is ready with 4 hosts. 
+
+o.	Once the installation is done. Select “Custom Services” and pick HDFS and YARN from it and press continue
+ 
+ 
+ 
+p.	Then select the services on host as per the below list
+ 		NameNode - Second Host
+Secondary Namenode - Third Host
+Balancer - Fourth Host
+DataNode - All Hosts
+ 
+Pick First host for all the cloudera management services components. 
+ResourceManager - Second Host
+JobHistory Server - Third host
+NodeManager - Same as Datanode
+ 
+Verify the snapshot for more reference. 
+
+ 
+ 
+Click Continue to proceed with the installation. 
+
+Provide the database details for the cloudera management services – Reports Manager and Activity Monitor
+
+Reports Manager
+Database Hostname – cloudera-1
+Database Type – Mysql
+Database Name – rman
+Username – rman
+Password – rman_password
+
+Activity Monitor
+Database Hostname – cloudera-1
+Database Type – Mysql
+Database Name – amon	
+Username – amon
+Password – amon_password
+
+Click Test Connection to verify the connection. 
+
+ 
+
+Once you click the continue button, you will be redirected to “Review Changes” page. Kindly go through every configuration. Let’s have everything default now. We can do the configurations changes once we setup and cluster is running. Click continue on the screen. 
+ 
+
+Then you will be seeing Installation wizard. It takes five minutes of maximum to install all the components. Once all the components are installed, you could see the continue button. Click on that to continue. 
+
+ 
+ 
+Click the Finish Button to Complete the Installation. 
+Now you have Cloudera Manager with HDFS and YARN Installed.
+ 

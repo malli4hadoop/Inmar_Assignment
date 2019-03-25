@@ -1,0 +1,43 @@
+Flume:
+ flume.conf
+#Name of the components:
+
+ TwitterAgent.sources=Twitter
+ TwitterAgent.channels=MemChannel
+ TwitterAgent.sinks=HDFS
+
+#Describe and configure the source:
+ 
+ TwitterAgent.sources.Twitter.type = com.cloudera.flume.source.TwitterSource
+ TwitterAgent.sources.Twitter.channels = MemChannel
+ TwitterAgent.sources.Twitter.consumerKey = xwMZWocS3Wun8AAQy2C9nQxnd
+ TwitterAgent.sources.Twitter.consumerSecret = DybEi3lEO1zPxTEEnBCO4cyO1fEsKums3KKMRFBv9t4tcz4Vxh
+ TwitterAgent.sources.Twitter.accessToken = 2955082608-kN8T19Nnt9H0TwUBcsDC6oyXe3izFg5rmQDlRfc
+ TwitterAgent.sources.Twitter.accessTokenSecret = ifYwz2QXchyckuR20M7R66LJxmbNZhmmLrR8wJXcDj6H1
+
+#Twitter handle to search:
+ 
+ TwitterAgent.sources.Twitter.keywords = Bigdata Analytics
+ 
+#Describe thesink:
+
+ TwitterAgent.sinks.HDFS.channel=MemChannel
+ TwitterAgent.sinks.HDFS.type=hdfs
+ TwitterAgent.sinks.HDFS.hdfs.path=hdfs://ip-172-31-26-5:10001/flumegrab/twitter
+ TwitterAgent.sinks.HDFS.hdfs.fileType=DataStream
+ TwitterAgent.sinks.HDFS.hdfs.writeFormat=Text
+ TwitterAgent.sinks.HDFS.hdfs.batchSize=1000
+ TwitterAgent.sinks.HDFS.hdfs.rollSize=0
+ TwitterAgent.sinks.HDFS.hdfs.rollCount=10000
+ TwitterAgent.sinks.HDFS.hdfs.rollInterval=900
+
+#Describe the channel
+
+ TwitterAgent.channels.MemChannel.type=memory
+ TwitterAgent.channels.MemChannel.capacity=10000
+ TwitterAgent.channels.MemChannel.transactionCapacity=100
+ 
+ 
+Command to begin the real time data capture
+
+ ./flume-ng agent -n TwitterAgent -c conf -f /home/hadoop/flume/conf/flume.conf
