@@ -1,0 +1,136 @@
+
+#Prerequisites
+set hive.exec.dynamic.partition = true;
+set hive.exec.dynamic.partition.mode = nonstrict;
+
+By default we dont have delete & update in hive,So going for insert overwrite to remove the records. 
+If we need to perform  Delete or update then table should have partiton & bucketed and ACID transactions should be true in cluster
+-------------------------------------------------------
+#Creating an external table over the file in the consumercomplaints  folder called consumercomplaints.  
+
+CREATE EXTERNAL TABLE inmar.consumer_complaints2(
+received_date string,
+product string,
+sub_product string,
+issue string,
+sub_issue string,
+consumer_complaint_narrative string,
+company_public_response string,
+company string,
+state string,
+ZIP_code string,
+tags string,
+consumer_consent_provided string,
+submitted_via string,
+sent_date_to_company date,
+company_response_to_consumer string,
+timely_response string,
+consumer_disputed string,
+complaint_ID string
+)
+ROW FORMAT DELIMITED
+fields terminated by ,
+STORED AS TEXTFILE
+LOCATION /consumercomplaints/;
+
+---------------------------------------------------------------------
+#Creating another table called consumercomplaints_partitioned and partition the table by state.
+
+CREATE EXTERNAL TABLE inmar.consumer_complaints_partitioned(
+received_date string,
+product string,
+sub_product string,
+issue string,
+sub_issue string,
+consumer_complaint_narrative string,
+company_public_response string,
+company string,
+ZIP_code string,
+tags string,
+consumer_consent_provided string,
+submitted_via string,
+sent_date_to_company date,
+company_response_to_consumer string,
+timely_response string,
+consumer_disputed string,
+complaint_ID string
+)
+PARTITIONED BY (state string)
+ROW FORMAT DELIMITED
+fields terminated by ,
+STORED AS TEXTFILE
+LOCATION /consumercomplaints/;
+
+insert into table inmar.consumer_complaints_partitioned partition(state)
+select received_date,product,sub_product,issue,sub_issue,consumer_complaint_narrative,company_public_response,company,
+ZIP_code,tags,consumer_consent_provided,submitted_via,sent_date_to_company,company_response_to_consumer,timely_response,
+consumer_disputed,complaint_ID,state from inmar.consumer_complaints2;
+
+---------------------------------------------------------
+
+1.	Total number of complaints for each company
+select count(*),company from inmar.consumer_complaints_partitioned group by company;
+
+2.	Total number of Disputed vs. Undisputed consumer complaints
+select count(*),Consumer_disputed from inmar.consumer_complaints_partitioned group by Consumer_disputed;
+
+3.	All consumer complaints centered around Mortgages that were being foreclosed upon from Bank of America.
+select * from inmar.consumer_complaints_partitioned where product = "Mortgage" and company like "BANK OF AMERICA" and timely_response = "Yes"; 
+
+Create a new transactional table called consumercomplaints_new and insert the data from the consumercomplaints table.  
+create table inmar.consumer_complaints_new as select * from inmar.consumer_complaints_partitioned;
+
+1.	Copy all rows that have state = 'NC' or state = 'TX' out of the consumercomplaints_new table into a separate table 
+create table inmar.consumer_complaints_temp as select * from inmar.consumer_complaints_new where state in ('NC', 'TX');
+
+2.	Delete all rows out of the consumercomplaints_new table that have state = 'NC' or state = 'TX'. 
+By default we dont have delete & update in hive,So going for insert overwrite to remove the records. 
+If we need to perform  Delete or update then table should have partiton & bucketed and ACID transactions should be true in cluster
+insert overwrite table inmar.consumer_complaints_new select * from where state not in ('NC', 'TX');
+
+3.	Insert only the rows where state = 'NC' into the consumercomplaints_new table from the temporary table above 
+insert into table inmar.consumer_complaints_new select * from inmar.consumer_complaints_temp where state = 'NC' 
+
+----------------------------------------------------------
+Sqoop:
+Note: Database server is notmworking, however I assuming all set and providing below query
+
+sqoop import –connect jdbc:hadooptest.cyrjpmsirks6.us-east-1.rds.amazonaws.com -username HadoopTest -password CanUSq00p1T?! –split-by EmpId –columns EmpId,EmpName,City –table company1 –target-dir /myhive –hive-import –create-hive-table –hive-table 
+
+1)   Write a query to determine the total sales for each product within ProductModel 'Racing Socks'.
+
+select count(*),product  from Racing_Socks group by product;
+
+
+
+
+
+Task 3 - Streaming Architecture w/ Hive
+
+
+a.	Store the twitter data called sample_twitter_data in HDFS. You can use this link to download it.  The data is in json format and should not be altered.  
+
+Note: Sample data link is not responding to download, demo purpose I I assuming all set
+
+1.Create the table
+
+ADD JAR hdfs:///prod/code/serde/json-serde-1.3.8-jar-with-dependencies.jar;
+
+CREATE external TABLE `json_table`(
+Col1 string,
+col2 string,
+col3 string,
+col4 string
+)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe' WITH SERDEPROPERTIES ( "ignore.malformed.json" = "true")
+STORED AS TEXTFILE;
+
+2.Load the data.
+hdfs dfs -cp /twitter_data.json /apps/user/hive/warehouse/json_table
+
+
+b.	Once the data is in HDFS, create an hcat/hive schema to be able to answer the following question: What are all the tweets by the twitter user "Aimee_Cottle"? You will need to provide the query that answers this question.
+
+select * from the json_table where name = "Aimee_Cottle";
+
+
